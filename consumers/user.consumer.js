@@ -1,4 +1,4 @@
-const connectRabbitMQ = require("../config/rabbitmq");
+const connectRabbitMQ = require("../rabbitmq/user.rabbitmq");
 
 async function consumeMessages() {
     try {
