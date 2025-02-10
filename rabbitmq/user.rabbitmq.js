@@ -1,25 +1,29 @@
 const amqp = require("amqplib");
 
-let channel = null;
-
-async function connectRabbitMQ() {
-    if (!process.env.RABBITMQ_HOST) {
-        console.log("🚀 Skipping RabbitMQ connection (not configured).");
-        return null;
+class UserRabbitMQ {
+    constructor() {
+        this.channel = null;
     }
 
-    try {
-        const rabbitmqHost = process.env.RABBITMQ_HOST || "rabbitmq";
-        const connection = await amqp.connect(`amqp://${rabbitmqHost}`);
-        channel = await connection.createChannel();
-        await channel.assertQueue("user_created");
-        await channel.assertQueue("user_deleted");
-        console.log("✅ Connected to RabbitMQ");
-    } catch (error) {
-        console.error("❌ RabbitMQ Connection Failed:", error.message);
-    }
+    async connect() {
+        if (!process.env.RABBITMQ_HOST) {
+            console.log("🚀 Skipping RabbitMQ connection (not configured). ");
+            return null;
+        }
 
-    return channel;
+        try {
+            const rabbitmqHost = process.env.RABBITMQ_HOST || "rabbitmq";
+            const connection = await amqp.connect(`amqp://${rabbitmqHost}`);
+            this.channel = await connection.createChannel();
+            await this.channel.assertQueue("user_created");
+            await this.channel.assertQueue("user_deleted");
+            console.log("✅ Connected to RabbitMQ");
+        } catch (error) {
+            console.error("❌ RabbitMQ Connection Failed:", error.message);
+        }
+
+        return this.channel;
+    }
 }
 
-module.exports = connectRabbitMQ;
+module.exports = new UserRabbitMQ();
