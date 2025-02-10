@@ -1,0 +1,30 @@
+{
+    "recommendations": [
+        "usernamehw.errorlens",
+        "vscode-icons-team.vscode-icons",
+        "nickmillerdev.pytest-fixtures",
+        "christian-kohler.npm-intellisense",
+        "xabikos.JavaScriptSnippets",
+        "andys8.jest-snippets",
+        "firsttris.vscode-jest-runner",
+        "andys8.jest-snippets",
+        "codezombiech.gitignore",
+        "donjayamanne.githistory",
+        "huizhou.githd",
+        "shaharkazaz.git-merger",
+        "github.vscode-github-actions",
+        "eamodio.gitlens",
+        "codezombiech.gitignore",
+        "mhutchie.git-graph",
+        "waderyan.gitblame",
+        "donjayamanne.git-extension-pack",
+        "EditorConfig.EditorConfig",
+        "in4margaret.compareit",
+        "streetsidesoftware.code-spell-checker",
+        "formulahendry.code-runner",
+        "dbaeumer.vscode-eslint",
+        "IronGeek.vscode-env",
+        "dotenv.dotenv-vscode",
+        "mikestead.dotenv"
+    ]
+}

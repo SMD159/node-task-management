@@ -1,0 +1,7 @@
+{
+    "ignore": [
+        "swagger-output.json",
+        "README",
+        "utils"
+    ]
+}
