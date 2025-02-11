@@ -1,5 +1,5 @@
 const { Model } = require("objection");
-const knex = require("../knes.js/index.js");
+const knex = require("../knex/index.js");
 
 Model.knex(knex); // ✅ Bind Knex instance
 

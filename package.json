@@ -3,15 +3,14 @@
   "version": "1.0.0",
   "main": "index.js",
   "scripts": {
-    "start": "cross-env NODE_ENV=development node server.js",
-    "test": "cross-env NODE_ENV=test jest --coverage",
-    "migrate:test": "cross-env NODE_ENV=test knex migrate:latest",
+    "start": "set NODE_ENV=development&& node server.js",
+    "test": "set NODE_ENV=test&& jest --coverage",
+    "migrate:test": "set NODE_ENV=test&& npx knex migrate:latest",
     "migrate": "npx knex migrate:latest",
     "lint": "eslint . --fix",
     "knex": "knex",
     "migrate:latest": "knex migrate:latest",
     "migrate:rollback": "knex migrate:rollback",
-    "seed": "knex seed:run",
     "dev": "nodemon --ignore swagger-output.json server.js"
   },
   "keywords": [],
