@@ -1,10 +1,17 @@
 const User = require("../../models/user.model");
 const redis = require("../../redis/user.redis");
-const connectRabbitMQ = require("../../rabbitmq/user.rabbitmq");
+// const connectRabbitMQ = require("../../rabbitmq/user.rabbitmq");
+const rabbitMQ = require("../../rabbitmq/user.rabbitmq"); // ✅ Import the class instance
 
 class UserService {
     async publishToQueue(queue, message) {
-        const channel = await connectRabbitMQ();
+        // const channel = await connectRabbitMQ();
+        const channel = await rabbitMQ.connect();
+        if (!channel) {
+            console.error("❌ RabbitMQ channel not available.");
+            return;
+        }
+
         await channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)));
     }
 
@@ -15,7 +22,8 @@ class UserService {
         await redis.set(`user:${user.id}`, JSON.stringify(user), "EX", 3600)
             .then(() => console.log("✅ User cached successfully"))
             .catch((err) => console.error("❌ Redis error:", err));
-
+        await this.publishToQueue("user_created", { id: user.id, name: user.name, email: user.email });
+        console.log("📤 Published user_created event to RabbitMQ");
         return user;
     }
 

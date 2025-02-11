@@ -70,7 +70,7 @@ services:
       DATABASE_URL: postgresql://user:password@postgres:5432/mydatabase
       MYSQL_DATABASE_URL: mysql://user:password@mysql:3306/mydatabase
       RABBITMQ_URL: amqp://rabbitmq:5672
-
+    command: ["sh", "-c", "node consumers/user.consumer.js & node server.js"]  # ✅ Runs both API and Consumer
 
 volumes:
   postgres_data:
