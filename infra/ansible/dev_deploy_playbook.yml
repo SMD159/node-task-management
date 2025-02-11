@@ -1,0 +1,8 @@
+- name: Development Deployment Playbook
+  hosts: dev_servers
+  tasks:
+    - name: Pull latest Docker image
+      command: docker pull bkk/node-app-dev:latest
+
+    - name: Restart the container
+      command: docker-compose -f docker-compose.dev.yml up -d --force-recreate

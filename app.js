@@ -5,7 +5,7 @@ const swaggerUi = require("swagger-ui-express");
 const userRoutes = require("./routes/index");
 const swaggerDocs = require("./configs/swaggerDocs");
 const path = require("path");
-require("dotenv").config({ path: "./envs/.env" });
+require("dotenv").config({ path: "./envs/.env.dev" });
 
 console.log("DB_HOST:", process.env.DB_HOST);
 console.log("DB_NAME:", process.env.DB_NAME);
