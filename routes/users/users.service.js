@@ -27,7 +27,7 @@ class UserService {
         const cachedUser = await redis.get(`user:${id}`);
         if (cachedUser) return JSON.parse(cachedUser);
 
-        const user = await User.query().select("id", "name", "email").findById(id);
+        const user = await User.query().select("id", "name", "email").findById(id); // Ensure "email" is selected
         redis.ping().then(console.log).catch(console.error);
 
         if (user) await redis.set(`user:${id}`, JSON.stringify(user), "EX", 3600);
@@ -45,11 +45,33 @@ class UserService {
     }
 
     async deleteUser(id) {
-        await User.query().deleteById(id);
-        await redis.del(`user:${id}`);
-        await this.publishToQueue("user_deleted", { id });
+        try {
+            console.log(`Attempting to delete user with ID: ${id}`);
 
-        return { message: "User deleted" };
+            // Check if user exists before deleting
+            const user = await User.query().findById(id);
+            if (!user) {
+                console.error(`❌ User with ID ${id} not found`);
+                throw new Error("User not found");
+            }
+
+            // Delete user from DB
+            await User.query().deleteById(id);
+            console.log(`✅ User with ID ${id} deleted from database`);
+
+            // Remove user from Redis cache
+            const redisResult = await redis.del(`user:${id}`);
+            console.log(`🗑️  Redis delete result: ${redisResult}`);
+
+            // Publish delete event to RabbitMQ
+            await this.publishToQueue("user_deleted", { id });
+            console.log("📤 Published delete event to RabbitMQ: user_deleted");
+
+            return { message: "User deleted" };
+        } catch (error) {
+            console.error("❌ Error deleting user:", error);
+            throw new Error(error.message);
+        }
     }
 }
 

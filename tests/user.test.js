@@ -1,7 +1,7 @@
 const request = require("supertest");
-const app = require("../server"); // Ensure this is the correct path to your Express app
-const knex = require("../configs/knex");
-const redis = require("../configs/redis");
+const app = require("../app"); // Ensure this is the correct path to your Express app
+const knex = require("../knex/index.js");
+const redis = require("../redis/user.redis.js");
 const amqp = require("amqplib");
 
 beforeAll(async () => {
@@ -12,7 +12,7 @@ afterAll(async () => {
     await knex.destroy(); // Close DB connection after tests
 });
 
-jest.mock("../configs/redis", () => ({
+jest.mock("../redis/user.redis.js", () => ({
     get: jest.fn().mockResolvedValue(null),
     set: jest.fn().mockResolvedValue("OK"),
     ping: jest.fn().mockResolvedValue("PONG"), // ✅ Added mock function
@@ -73,17 +73,21 @@ describe("User API Endpoints", () => {
         expect(rabbitMQChannel.sendToQueue).toHaveBeenCalledWith("emailQueue", payload);
     });
 
-    it("should fetch a user by ID", async () => {
+    it("✅ Should fetch a user by ID", async () => {
         if (!userId) {
-            const user = await knex("users").first();
+            const user = await knex("users").select("id", "email").first();
             if (user) userId = user.id;
         }
+
         const res = await request(app).get(`/api/users/${userId}`);
         expect(res.statusCode).toBe(200);
 
-        // ✅ Ensure both `name` and `email` exist
-        expect(res.body).toHaveProperty("email");
+        console.log("User API Response:", res.body); // Debugging: Check response structure
+
+        // ✅ Ensure both `name` and `email` exist before asserting
+        expect(res.body).toHaveProperty("id", userId);
         expect(res.body).toHaveProperty("name");
+        expect(res.body).toHaveProperty("email"); // Now email should exist
     });
 
     it("should return 400 for non-existing user", async () => {
@@ -101,7 +105,12 @@ describe("User API Endpoints", () => {
     });
 
     it("should delete a user and check DB removal", async () => {
+        console.log(`🗑️  Attempting to delete user with ID: ${userId}`);
+
         const res = await request(app).delete(`/api/users/${userId}`);
+
+        console.log("DELETE Response:", res.body); // Log response
+
         expect(res.statusCode).toBe(200);
         expect(res.body).toHaveProperty("message", "User deleted");
 
