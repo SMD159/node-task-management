@@ -1,48 +1,48 @@
-const connectRabbitMQ = require("../rabbitmq/user.rabbitmq");
+const fs = require("fs");
+const path = require("path");
+const rabbitMQ = require("../rabbitmq/user.rabbitmq"); // ✅ Import as an object
 
-class UserConsumer {
+class UserLogger {
     async consumeMessages() {
         try {
-            this.channel = await connectRabbitMQ();
-            this.channel.prefetch(1);
+            const channel = await rabbitMQ.connect(); // ✅ Call the `.connect()` method
+            if (!channel) {
+                console.error("🚨 Failed to connect to RabbitMQ. Retrying in 5 seconds...");
+                setTimeout(() => this.consumeMessages(), 5000);
+                return;
+            }
 
-            console.log("✅ RabbitMQ Consumers Running...");
+            channel.prefetch(1);
+            console.log("📂 Logging Consumer Running...");
 
-            this.channel.consume("user_created", (msg) => {
-                try {
-                    const user = JSON.parse(msg.content.toString());
-                    console.log("📩 New User Created:", user);
-
-                    // Process user creation logic (e.g., send email)
-                    // await sendWelcomeEmail(user);
-
-                    this.channel.ack(msg);
-                } catch (error) {
-                    console.error("🚨 Error processing user_created message:", error);
-                }
+            channel.consume("user_created", (msg) => {
+                const user = JSON.parse(msg.content.toString());
+                console.log("📝 Logging user creation:", user);
+                this.logToFile(`User Created: ${JSON.stringify(user)}`);
+                channel.ack(msg);
             });
 
-            this.channel.consume("user_deleted", (msg) => {
-                try {
-                    const { id } = JSON.parse(msg.content.toString());
-                    console.log("❌ User Deleted:", id);
-
-                    // Process user deletion logic (e.g., remove from cache)
-                    // await removeUserData(id);
-
-                    this.channel.ack(msg);
-                } catch (error) {
-                    console.error("🚨 Error processing user_deleted message:", error);
-                }
+            channel.consume("user_deleted", (msg) => {
+                const { id } = JSON.parse(msg.content.toString());
+                console.log("📝 Logging user deletion:", id);
+                this.logToFile(`User Deleted: ${id}`);
+                channel.ack(msg);
             });
         } catch (error) {
-            console.error("🚨 RabbitMQ Connection Error:", error);
-            setTimeout(() => this.consumeMessages(), 5000);
+            console.error("🚨 RabbitMQ Logging Consumer Error:", error);
+            setTimeout(() => this.consumeMessages(), 5000); // Retry after 5 seconds
         }
+    }
+
+    logToFile(message) {
+        const logFilePath = path.join(__dirname, "../logs/user_activity.log");
+        fs.appendFile(logFilePath, `${new Date().toISOString()} - ${message}\n`, (err) => {
+            if (err) console.error("❌ Error writing to log file:", err);
+        });
     }
 }
 
-const rabbitMQConsumer = new UserConsumer();
-rabbitMQConsumer.consumeMessages();
+const userLogger = new UserLogger();
+userLogger.consumeMessages();
 
-module.exports = rabbitMQConsumer;
+module.exports = userLogger;
