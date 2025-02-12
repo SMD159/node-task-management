@@ -1,121 +1,145 @@
-const request = require("supertest");
-const app = require("../app"); // Ensure this is the correct path to your Express app
-const knex = require("../knex/index.js");
-const redis = require("../redis/user.redis.js");
-const amqp = require("amqplib");
-
-beforeAll(async () => {
-    await knex.migrate.latest(); // Ensure tables exist
-});
-
-afterAll(async () => {
-    await knex.destroy(); // Close DB connection after tests
-});
+const UserService = require("../routes/users/users.service"); // Import the service
+const User = require("../models/user.model"); // Import User model
+const redis = require("../redis/user.redis"); // Mock Redis
+const rabbitMQ = require("../rabbitmq/user.rabbitmq"); // Mock RabbitMQ
 
 jest.mock("../redis/user.redis.js", () => ({
-    get: jest.fn().mockResolvedValue(null),
-    set: jest.fn().mockResolvedValue("OK"),
-    ping: jest.fn().mockResolvedValue("PONG"), // ✅ Added mock function
-    del: jest.fn().mockResolvedValue(1) // ✅ Added mock function
+    get: jest.fn(),
+    set: jest.fn(),
+    del: jest.fn(),
+    ping: jest.fn()
 }));
 
-// Mock RabbitMQ
-jest.mock("amqplib", () => ({
+jest.mock("../rabbitmq/user.rabbitmq", () => ({
     connect: jest.fn().mockResolvedValue({
-        createChannel: jest.fn().mockResolvedValue({
-            assertQueue: jest.fn().mockResolvedValue(true),
-            sendToQueue: jest.fn().mockResolvedValue(true)
-        })
+        sendToQueue: jest.fn().mockResolvedValue(true)
     })
 }));
 
-let rabbitMQChannel;
+describe("UserService", () => {
+    let mockUser;
 
-beforeAll(async () => {
-    // Mock RabbitMQ connection
-    const rabbitMQConnection = await amqp.connect();
-    rabbitMQChannel = await rabbitMQConnection.createChannel();
-    await rabbitMQChannel.assertQueue("emailQueue");
-});
-
-afterAll(async () => {
-    await knex.destroy();
-});
-
-describe("User API Endpoints", () => {
-    let userId;
-
-    it("should create a new user", async () => {
-        const res = await request(app)
-            .post("/api/users")
-            .send({ name: "John Doe", email: "john@example.com", password: "securePassword123" }); // ✅ Added password
-
-        expect(res.statusCode).toBe(201);
-        expect(res.body).toHaveProperty("id");
-        userId = res.body.id;
+    beforeAll(() => {
+        mockUser = {
+            id: 1,
+            name: "John Doe",
+            email: "johndoe@example.com",
+            password: "securePassword123"
+        };
     });
 
-    it("should fetch all users", async () => {
-        const res = await request(app).get("/api/users");
-        expect(res.statusCode).toBe(200);
-        expect(Array.isArray(res.body)).toBe(true);
+    afterEach(() => {
+        jest.clearAllMocks(); // Reset mocks after each test
     });
 
-    it("should check Redis cache for a user", async () => {
-        redis.get.mockResolvedValue(JSON.stringify({ id: userId, name: "John Doe" }));
-        const cachedUser = await redis.get(`user:${userId}`);
-        expect(JSON.parse(cachedUser)).toHaveProperty("name", "John Doe");
+    it("should create a new user and cache it in Redis", async () => {
+        jest.spyOn(User, "query").mockReturnValue({
+            insert: jest.fn().mockResolvedValue(mockUser)
+        });
+
+        const user = await UserService.createUser(mockUser);
+
+        expect(user).toEqual(mockUser);
+        expect(redis.set).toHaveBeenCalledWith(
+            `user:${user.id}`,
+            JSON.stringify(user),
+            "EX",
+            3600
+        );
+        expect(rabbitMQ.connect().sendToQueue).toHaveBeenCalledWith(
+            "user_created",
+            Buffer.from(JSON.stringify({ id: user.id, name: user.name, email: user.email }))
+        );
     });
 
-    it("should publish a message to RabbitMQ", async () => {
-        const payload = Buffer.from(JSON.stringify({ userId }));
-        rabbitMQChannel.sendToQueue("emailQueue", payload);
-        expect(rabbitMQChannel.sendToQueue).toHaveBeenCalledWith("emailQueue", payload);
+    // ✅ Get All Users
+    it("should return all users", async () => {
+        jest.spyOn(User, "query").mockReturnValue({
+            select: jest.fn().mockResolvedValue([mockUser])
+        });
+
+        const users = await UserService.getAllUsers();
+        expect(users).toEqual([mockUser]);
     });
 
-    it("✅ Should fetch a user by ID", async () => {
-        if (!userId) {
-            const user = await knex("users").select("id", "email").first();
-            if (user) userId = user.id;
-        }
+    // ✅ Get User By ID (with Redis caching)
 
-        const res = await request(app).get(`/api/users/${userId}`);
-        expect(res.statusCode).toBe(200);
+    // ✅ Get User By ID (from database when not cached)
+    it("should fetch a user from the database when not in Redis", async () => {
+        redis.get.mockResolvedValue(null);
 
-        console.log("User API Response:", res.body); // Debugging: Check response structure
+        jest.spyOn(User, "query").mockReturnValue({
+            select: jest.fn().mockResolvedValue([mockUser]),
+            findById: jest.fn().mockResolvedValue(mockUser)
+        });
 
-        // ✅ Ensure both `name` and `email` exist before asserting
-        expect(res.body).toHaveProperty("id", userId);
-        expect(res.body).toHaveProperty("name");
-        expect(res.body).toHaveProperty("email"); // Now email should exist
+        const user = await UserService.getUserById(mockUser.id);
+
+        expect(User.query().findById).toHaveBeenCalledWith(mockUser.id);
+        expect(redis.set).toHaveBeenCalledWith(
+            `user:${mockUser.id}`,
+            JSON.stringify(mockUser),
+            "EX",
+            3600
+        );
+        expect(user).toEqual(mockUser);
     });
 
-    it("should return 400 for non-existing user", async () => {
-        const res = await request(app).get("/api/users/invalidId123");
-        expect(res.statusCode).toBe(400); // ✅ Now correctly returns 400 for an invalid ID
+    // ✅ Update User
+    it("should update a user and refresh Redis cache", async () => {
+        const updatedUser = { ...mockUser, name: "John Updated" };
+
+        jest.spyOn(User, "query").mockReturnValue({
+            patchAndFetchById: jest.fn().mockResolvedValue(updatedUser)
+        });
+
+        const user = await UserService.updateUser(mockUser.id, { name: "John Updated" });
+
+        expect(User.query().patchAndFetchById).toHaveBeenCalledWith(mockUser.id, { name: "John Updated" });
+        expect(redis.set).toHaveBeenCalledWith(
+            `user:${mockUser.id}`,
+            JSON.stringify(updatedUser),
+            "EX",
+            3600
+        );
+        expect(user).toEqual(updatedUser);
     });
 
-    it("should update a user", async () => {
-        const res = await request(app)
-            .put(`/api/users/${userId}`)
-            .send({ name: "John Updated" });
+    // ✅ Delete User
+    it("should delete a user, remove from Redis, and publish event to RabbitMQ", async () => {
+        jest.spyOn(User, "query").mockReturnValue({
+            findById: jest.fn().mockResolvedValue(mockUser),
+            deleteById: jest.fn().mockResolvedValue(1)
+        });
 
-        expect(res.statusCode).toBe(200);
-        expect(res.body).toHaveProperty("name", "John Updated");
+        redis.del.mockResolvedValue(1);
+
+        const response = await UserService.deleteUser(mockUser.id);
+
+        expect(User.query().findById).toHaveBeenCalledWith(mockUser.id);
+        expect(User.query().deleteById).toHaveBeenCalledWith(mockUser.id);
+        expect(redis.del).toHaveBeenCalledWith(`user:${mockUser.id}`);
+        expect(rabbitMQ.connect().sendToQueue).toHaveBeenCalledWith(
+            "user_deleted",
+            Buffer.from(JSON.stringify({ id: mockUser.id }))
+        );
+        expect(response).toEqual({ message: "User deleted" });
     });
 
-    it("should delete a user and check DB removal", async () => {
-        console.log(`🗑️  Attempting to delete user with ID: ${userId}`);
+    it("should return a user from Redis cache", async () => {
+        redis.get.mockResolvedValue(JSON.stringify(mockUser));
 
-        const res = await request(app).delete(`/api/users/${userId}`);
+        const user = await UserService.getUserById(mockUser.id);
 
-        console.log("DELETE Response:", res.body); // Log response
+        expect(redis.get).toHaveBeenCalledWith(`user:${mockUser.id}`);
+        expect(user).toEqual(mockUser);
+    });
+    // ❌ Delete Non-Existing User (Error Case)
+    it("should throw an error if the user does not exist", async () => {
+        jest.spyOn(User, "query").mockReturnValue({
+            findById: jest.fn().mockResolvedValue(null)
+        });
 
-        expect(res.statusCode).toBe(200);
-        expect(res.body).toHaveProperty("message", "User deleted");
-
-        // Check DB removal
-        const user = await knex("users").where({ id: userId }).first();
-        expect(user).toBeUndefined();
+        await expect(UserService.deleteUser(99)).rejects.toThrow("User not found");
     });
 });

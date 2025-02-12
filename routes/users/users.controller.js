@@ -8,7 +8,7 @@ class UserController {
             res.status(201).json(user);
         } catch (error) {
             console.error("Error creating user:", error);
-            res.status(400).json({ error: error.message });
+            res.status(400).json({ error: error.message }); // no need to it
         }
     }
 

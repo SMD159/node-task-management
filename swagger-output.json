@@ -1,30 +1,36 @@
 {
   "swagger": "2.0",
   "info": {
-    "title": "Task Management API",
-    "description": "Task Management CRUD API with Swagger Documentation",
-    "version": "1.0.0"
+    "title": "Task Management Application",
+    "version": "1.0.0",
+    "description": "Complete node task",
+    "contact": {
+      "name": "",
+      "url": "",
+      "email": ""
+    }
   },
   "host": "localhost:3000",
   "servers": [
     {
+      "url": "/",
+      "description": "Server 1"
+    },
+    {
       "url": "http://localhost:3000",
-      "description": "Local Development Server"
+      "description": "Server 2"
     }
   ],
   "basePath": "/",
-  "tags": [
-    {
-      "name": "Users",
-      "description": "User management routes"
-    },
-    {
-      "name": "Tasks",
-      "description": "Task management routes"
-    }
-  ],
   "schemes": [
-    "http"
+    "http",
+    "https"
+  ],
+  "consumes": [
+    "application/json"
+  ],
+  "produces": [
+    "application/json"
   ],
   "paths": {
     "/users/": {
@@ -116,5 +122,61 @@
         }
       }
     }
-  }
+  },
+  "definitions": {
+    "responseObject": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "message": {
+          "type": "string",
+          "example": "success"
+        },
+        "data": {
+          "type": "object",
+          "properties": {}
+        }
+      }
+    },
+    "responseArray": {
+      "type": "object",
+      "properties": {
+        "success": {
+          "type": "boolean",
+          "example": true
+        },
+        "message": {
+          "type": "string",
+          "example": "success"
+        },
+        "data": {
+          "type": "array",
+          "example": [],
+          "items": {}
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      },
+      "basicAuth": {
+        "type": "http",
+        "scheme": "basic"
+      }
+    }
+  },
+  "security": [
+    {
+      "bearerAuth": [],
+      "basicAuth": []
+    }
+  ]
 }

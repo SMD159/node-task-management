@@ -1,18 +1,60 @@
 module.exports = {
+    openapi: process.env.SWAGGER_VERSION,
     info: {
-        title: "Task Management API",
-        description: "Task Management CRUD API with Swagger Documentation",
-        version: "1.0.0"
+        title: "Task Management Application",
+        version: process.env.SWAGGER_DOC_VERSION,
+        description: "Complete node task",
+        contact: {
+            name: "",
+            url: "",
+            email: ""
+        }
     },
     servers: [
         {
-            url: "http://localhost:3000",
-            description: "Local Development Server"
+            url: process.env.SWAGGER_BASE_API ? process.env.SWAGGER_BASE_API : "/",
+            description: "Server 1"
+        },
+        {
+            url: `http://localhost:${process.env.PORT}`,
+            description: "Server 2"
         }
     ],
-    tags: [
-        { name: "Users", description: "User management routes" },
-        { name: "Tasks", description: "Task management routes" }
-    ],
-    paths: {} // swagger-autogen will populate this
+    schemes: ["http", "https"],
+    consumes: ["application/json"],
+    produces: ["application/json"],
+    tags: [],
+    definitions: {
+        responseObject: {
+            success: true,
+            message: "success",
+            data: {}
+        },
+
+        responseArray: {
+            success: true,
+            message: "success",
+            data: []
+        }
+
+    },
+    components: {
+        securitySchemes: {
+            bearerAuth: {
+                type: "http",
+                scheme: "bearer",
+                bearerFormat: "JWT"
+            },
+            basicAuth: {
+                type: "http",
+                scheme: "basic"
+            }
+        }
+    },
+    security: [
+        {
+            bearerAuth: [],
+            basicAuth: []
+        }
+    ]
 };
