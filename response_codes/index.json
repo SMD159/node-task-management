@@ -1,0 +1,22 @@
+{
+    "invalid": {
+        "Code": "-3",
+        "Description": "Invalid Parameters"
+    },
+    "idService": {
+        "Code": "-2",
+        "Description": "Invalid IdService"
+    },
+    "missing": {
+        "Code": "-1",
+        "Description": "Missing Parameters"
+    },
+    "success": {
+        "Code": "0",
+        "Description": "Success"
+    },
+    "server": {
+        "Code": "1",
+        "Description": "Internal error"
+    }
+}

@@ -1,85 +1,99 @@
 const User = require("../../models/user.model");
 const redis = require("../../redis/user.redis");
-// const connectRabbitMQ = require("../../rabbitmq/user.rabbitmq");
-const rabbitMQ = require("../../rabbitmq/user.rabbitmq"); // ✅ Import the class instance
+const rabbitMQ = require("../../rabbitmq/user.rabbitmq");
 
 class UserService {
     async publishToQueue(queue, message) {
-        // const channel = await connectRabbitMQ();
-        const channel = await rabbitMQ.connect();
-        if (!channel) {
-            console.error("❌ RabbitMQ channel not available.");
-            return;
-        }
+        try {
+            const channel = await rabbitMQ.connect();
+            if (!channel) {
+                console.error("RabbitMQ channel not available.");
+                return;
+            }
 
-        await channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)));
+            await channel.sendToQueue(queue, Buffer.from(JSON.stringify(message)));
+            console.log(`Published event to RabbitMQ: ${queue}`);
+        } catch (error) {
+            console.error("Error publishing to RabbitMQ:", error);
+        }
     }
 
     async createUser(data) {
-        const user = await User.query().insert(data);
-        console.log("Saving user in Redis:", `user:${user.id}`, JSON.stringify(user));
+        try {
+            const user = await User.query().insert(data);
+            console.log("Saving user in Redis:", `user:${user.id}`, JSON.stringify(user));
 
-        await redis.set(`user:${user.id}`, JSON.stringify(user), "EX", 3600)
-            .then(() => console.log("✅ User cached successfully"))
-            .catch((err) => console.error("❌ Redis error:", err));
-        await this.publishToQueue("user_created", { id: user.id, name: user.name, email: user.email });
-        console.log("📤 Published user_created event to RabbitMQ");
-        return user;
+            // Handle Redis caching with try-catch instead of chaining
+            try {
+                await redis.set(`user:${user.id}`, JSON.stringify(user), "EX", 3600);
+                console.log("User cached successfully");
+            } catch (err) {
+                console.error("Redis error:", err);
+            }
+
+            await this.publishToQueue("user_created", {
+                id: user.id,
+                name: user.name,
+                email: user.email
+            });
+
+            return user;
+        } catch (error) {
+            console.error("Error creating user:", error);
+            throw new Error(error.message);
+        }
     }
 
-    async getAllUsers() {
-        return User.query();
-    }
+    async getUsers(payload) {
+        if (payload?.id) {
+            const cachedUser = await redis.get(`user:${payload.id}`);
+            if (cachedUser) return JSON.parse(cachedUser);
 
-    async getUserById(id) {
-        const cachedUser = await redis.get(`user:${id}`);
-        if (cachedUser) return JSON.parse(cachedUser);
+            const user = await User.query().select("id", "name", "email").findById(payload.id);
+            if (!user) {
+                return {
+                    success: false,
+                    responseCode: 404,
+                    message: payload.id ? "User not found" : "No users available",
+                    data: null
+                };
+            }
+            await redis.set(`user:${payload.id}`, JSON.stringify(user), "EX", 3600);
 
-        const user = await User.query().select("id", "name", "email").findById(id); // Ensure "email" is selected
-        redis.ping().then(console.log).catch(console.error);
-
-        if (user) await redis.set(`user:${id}`, JSON.stringify(user), "EX", 3600);
-
-        return user;
+            return user;
+        } else {
+            return await User.query();
+        }
     }
 
     async updateUser(id, data) {
         const updatedUser = await User.query().patchAndFetchById(id, data);
-        redis.ping().then(console.log).catch(console.error);
+        if (!updatedUser) {
+            throw new Error("User not found");
+        }
 
         await redis.set(`user:${id}`, JSON.stringify(updatedUser), "EX", 3600);
-
         return updatedUser;
     }
 
     async deleteUser(id) {
-        try {
-            console.log(`Attempting to delete user with ID: ${id}`);
+        console.log(`Attempting to delete user with ID: ${id}`);
 
-            // Check if user exists before deleting
-            const user = await User.query().findById(id);
-            if (!user) {
-                console.error(`❌ User with ID ${id} not found`);
-                throw new Error("User not found");
-            }
-
-            // Delete user from DB
-            await User.query().deleteById(id);
-            console.log(`✅ User with ID ${id} deleted from database`);
-
-            // Remove user from Redis cache
-            const redisResult = await redis.del(`user:${id}`);
-            console.log(`🗑️  Redis delete result: ${redisResult}`);
-
-            // Publish delete event to RabbitMQ
-            await this.publishToQueue("user_deleted", { id });
-            console.log("📤 Published delete event to RabbitMQ: user_deleted");
-
-            return { message: "User deleted" };
-        } catch (error) {
-            console.error("❌ Error deleting user:", error);
-            throw new Error(error.message);
+        const user = await User.query().findById(id);
+        if (!user) {
+            console.error(`User with ID ${id} not found`);
+            throw new Error("User not found");
         }
+
+        await User.query().deleteById(id);
+        console.log(`User with ID ${id} deleted from database`);
+
+        await redis.del(`user:${id}`);
+        console.log("User removed from Redis cache");
+
+        await this.publishToQueue("user_deleted", { id });
+
+        return { message: "User deleted" };
     }
 }
 
